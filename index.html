@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Pok&#233;mon Card Resale Analytics Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --red:#E3350D;
+  --red-dim:rgba(227,53,13,0.15);
+  --white:#F0EEE9;
+  --dark:#0E0E0E;
+  --card:#161616;
+  --card2:#1C1C1C;
+  --border:rgba(240,238,233,0.08);
+  --muted:#6B7280;
+  --muted2:#9CA3AF;
+}
+
+html, body {
+  width:100%;height:100%;overflow:hidden;
+  background:var(--dark);
+  color:var(--white);
+  font-family:'DM Sans',system-ui,sans-serif;
+  font-size:14px;
+}
+
+/* noise texture */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity:0.4;
+}
+
+/* OUTER SHELL — fills exactly the viewport, no scroll */
+#shell{
+  position:fixed;inset:0;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  transform-origin:top left;  /* scale applied by JS */
+}
+
+/* HEADER */
+.header{
+  flex-shrink:0;
+  position:relative;z-index:10;
+  border-bottom:1px solid var(--border);
+  padding:14px 32px 0;
+  display:flex;align-items:flex-end;justify-content:space-between;
+  background:linear-gradient(180deg,rgba(227,53,13,0.06) 0%,transparent 100%);
+}
+.logo-row{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.logo-text{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:24px;letter-spacing:3px;color:var(--white);line-height:1;
+}
+.logo-accent{color:var(--red)}
+.pokeball-svg{width:28px;height:28px;flex-shrink:0}
+.header-sub{
+  font-size:11px;color:var(--muted);
+  font-family:'DM Mono',monospace;letter-spacing:0.5px;
+  padding-bottom:12px;
+}
+.header-sub span{color:var(--muted2)}
+
+/* TABS */
+.tabs{display:flex;align-items:flex-end;gap:2px}
+.tab{
+  background:transparent;color:var(--muted);
+  border:none;border-bottom:2px solid transparent;
+  padding:8px 18px 10px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+  font-weight:600;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+  transition:color .2s, border-color .2s;
+}
+.tab:hover{color:var(--white)}
+.tab.active{color:var(--white);border-bottom-color:var(--red)}
+
+/* PAGES — each fills remaining height, no overflow */
+.page{
+  display:none;
+  flex:1;
+  overflow:hidden;
+  padding:16px 32px;
+  position:relative;z-index:1;
+  flex-direction:column;
+  animation:fadeUp .25s ease;
+}
+.page.active{display:flex}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* KPI ROW */
+.kpis{display:flex;gap:8px;flex-shrink:0;margin-bottom:12px}
+.kpi{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:10px;padding:12px 16px;
+  flex:1;
+  position:relative;overflow:hidden;
+  transition:border-color .2s, transform .15s;
+}
+.kpi:hover{border-color:rgba(240,238,233,0.18);transform:translateY(-1px)}
+.kpi::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,0.02) 0%,transparent 60%);
+  pointer-events:none;
+}
+.kpi.accent{border-top:2px solid var(--red)}
+.kpi.plain{border-top:2px solid rgba(240,238,233,0.2)}
+.kpi-label{
+  font-size:9px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:2px;
+  font-weight:600;margin-bottom:5px;
+}
+.kpi-value{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:26px;letter-spacing:1px;line-height:1;
+}
+.kpi-value.red{color:var(--red)}
+.kpi-sub{
+  font-size:9px;color:var(--muted);
+  margin-top:4px;font-family:'DM Mono',monospace;
+}
+.kpi-sub .loss{color:var(--red)}
+
+/* GRIDS */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:0}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;flex-shrink:0}
+
+/* CARDS */
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;padding:16px;
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent);
+}
+.section-title{
+  font-size:9px;font-weight:700;color:var(--muted2);
+  text-transform:uppercase;letter-spacing:2.5px;
+  margin-bottom:10px;flex-shrink:0;
+  display:flex;align-items:center;gap:8px;
+}
+.section-title::before{
+  content:'';display:block;width:12px;height:2px;
+  background:var(--red);border-radius:1px;flex-shrink:0;
+}
+
+/* chart cards — canvas fills remaining card height */
+.chart-card{display:flex;flex-direction:column}
+.chart-card canvas{flex:1;min-height:0;display:block;width:100%!important}
+
+/* TABLE */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{
+  text-align:left;padding:6px 10px;
+  color:var(--muted);font-weight:600;
+  font-size:9px;text-transform:uppercase;letter-spacing:1.5px;
+  border-bottom:1px solid var(--border);
+}
+td{
+  padding:8px 10px;
+  border-bottom:1px solid rgba(240,238,233,0.03);
+  font-family:'DM Mono',monospace;font-size:11px;
+}
+td:first-child{font-family:'DM Sans',sans-serif;font-weight:600;font-size:12px}
+tr:hover td{background:rgba(255,255,255,0.02)}
+tr.total-row td{
+  border-top:1px solid var(--border);
+  border-bottom:none;padding-top:10px;
+}
+
+/* BAR ITEMS */
+.bar-item{
+  display:flex;align-items:center;gap:10px;
+  padding:5px 0;
+  border-bottom:1px solid rgba(240,238,233,0.03);
+}
+.bar-item:last-child{border-bottom:none}
+.bar-rank{
+  width:18px;height:18px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;flex-shrink:0;
+  font-family:'DM Mono',monospace;
+}
+.bar-label{flex:1;font-size:11px;color:var(--muted2);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{width:100px;background:rgba(240,238,233,0.05);border-radius:3px;height:4px;flex-shrink:0;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.bar-value{
+  font-family:'DM Mono',monospace;
+  font-size:11px;font-weight:500;width:40px;text-align:right;flex-shrink:0;
+}
+
+/* INSIGHT CARDS */
+.insight-num{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:30px;letter-spacing:1px;line-height:1;
+  margin-bottom:4px;
+}
+.insight-label{
+  font-size:9px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;
+}
+.insight-body{font-size:11px;color:var(--muted2);line-height:1.6;font-weight:400}
+
+/* PLATFORM CARDS */
+.plat-card{
+  background:var(--card2);
+  border:1px solid var(--border);
+  border-radius:10px;padding:14px;
+}
+.plat-note{font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5}
+.plat-note strong{color:var(--muted2);font-weight:600}
+
+canvas{display:block;max-width:100%}
+
+/* ── OVERVIEW PAGE ── */
+.overview-top{
+  display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start;
+  flex-shrink:0;margin-bottom:10px;
+  padding-bottom:10px;border-bottom:1px solid var(--border);
+}
+.overview-left{max-width:600px}
+.overview-right{min-width:280px}
+.overview-eyebrow{
+  font-size:9px;font-weight:700;color:var(--red);
+  text-transform:uppercase;letter-spacing:3px;
+  font-family:'DM Mono',monospace;margin-bottom:5px;
+}
+.overview-heading{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:17px;letter-spacing:1.5px;color:var(--white);
+  font-weight:400;margin-bottom:6px;line-height:1.15;
+}
+.overview-body{font-size:11px;color:var(--muted2);line-height:1.6;}
+.overview-body strong{color:var(--white);font-weight:600}
+.overview-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
+.overview-meta-item{display:flex;flex-direction:column;gap:1px}
+.overview-meta-label{
+  font-size:9px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:1.8px;
+  font-family:'DM Mono',monospace;
+}
+.overview-meta-value{font-size:12px;font-weight:600;color:var(--white)}
+.tools-row{display:flex;gap:5px;flex-wrap:wrap}
+.tool-tag{
+  background:rgba(240,238,233,0.06);
+  border:1px solid rgba(240,238,233,0.12);
+  border-radius:6px;padding:3px 7px;
+  font-size:9px;font-weight:700;color:var(--muted2);
+  font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase;
+}
+.tool-tag.highlight{
+  background:rgba(227,53,13,0.12);
+  border-color:rgba(227,53,13,0.3);color:var(--red);
+}
+
+/* ── PAGE-SPECIFIC LAYOUTS ── */
+
+/* Overview: charts flex, insight cards shrink */
+#page0 .chart-row{flex:1;min-height:0;margin-bottom:10px}
+#page0 .grid3{margin-top:0}
+
+/* Monthly: charts fixed height, table shrinks to content */
+#page1 .chart-row{flex-shrink:0;height:240px;margin-bottom:10px}
+#page1 .table-card{flex-shrink:0}
+
+/* Products: charts fixed height, items list shrinks to content */
+#page2 .chart-row{flex-shrink:0;height:240px;margin-bottom:10px}
+#page2 .items-card{flex-shrink:0}
+
+/* Platforms: charts fixed height, notes card shrinks */
+#page3 .chart-row{flex-shrink:0;height:240px;margin-bottom:10px}
+#page3 .plat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+#page3 .notes-card{flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div id="shell">
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo-row">
+      <svg class="pokeball-svg" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="20" r="19" fill="#0E0E0E" stroke="#333" stroke-width="1"/>
+        <path d="M1.1 20 A18.9 18.9 0 0 1 38.9 20 Z" fill="#E3350D"/>
+        <path d="M1.1 20 A18.9 18.9 0 0 0 38.9 20 Z" fill="#F0EEE9"/>
+        <rect x="1" y="18.5" width="38" height="3" fill="#0E0E0E"/>
+        <circle cx="20" cy="20" r="5.5" fill="#0E0E0E"/>
+        <circle cx="20" cy="20" r="4.5" fill="#F0EEE9"/>
+        <circle cx="20" cy="20" r="2" fill="#F0EEE9"/>
+      </svg>
+      <span class="logo-text">POK&#201;MON CARD RESALE <span class="logo-accent">ANALYTICS</span></span>
+    </div>
+    <div class="header-sub"><span>Jun - Sep 2025</span> &nbsp;/&nbsp; eBay &nbsp;/&nbsp; TCGPlayer &nbsp;/&nbsp; Facebook Marketplace</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="showPage(0)">Overview</button>
+    <button class="tab" onclick="showPage(1)">Monthly</button>
+    <button class="tab" onclick="showPage(2)">Products</button>
+    <button class="tab" onclick="showPage(3)">Platforms</button>
+  </div>
+</div>
+
+<!-- PAGE 0: OVERVIEW -->
+<div class="page active" id="page0">
+
+  <div class="overview-top">
+    <div class="overview-left">
+      <div class="overview-eyebrow">Project Overview</div>
+      <h2 class="overview-heading">Pok&eacute;mon Card Resale &mdash; Financial Performance Analysis</h2>
+      <p class="overview-body">
+        Tracks revenue, profit, ROI, and product-level performance across <strong>211 transactions</strong> on eBay, TCGPlayer, and Facebook Marketplace (Jun&ndash;Sep 2025).
+        Data collected manually, cleaned in Excel, and visualized here to surface actionable resale insights.
+      </p>
+    </div>
+    <div class="overview-right">
+      <div class="overview-meta">
+        <div class="overview-meta-item"><span class="overview-meta-label">Period</span><span class="overview-meta-value">Jun &ndash; Sep 2025</span></div>
+        <div class="overview-meta-item"><span class="overview-meta-label">Transactions</span><span class="overview-meta-value">211</span></div>
+        <div class="overview-meta-item"><span class="overview-meta-label">Platforms</span><span class="overview-meta-value">eBay / TCGPlayer / Facebook</span></div>
+        <div class="overview-meta-item"><span class="overview-meta-label">Type</span><span class="overview-meta-value">Personal Portfolio Project</span></div>
+      </div>
+      <div class="tools-row" style="margin-top:10px">
+        <span class="tool-tag highlight">Microsoft Excel</span>
+        <span class="tool-tag highlight">Data Analytics</span>
+        <span class="tool-tag highlight">HTML / CSS / JS</span>
+        <span class="tool-tag">Canvas API</span>
+        <span class="tool-tag">Financial Modeling</span>
+        <span class="tool-tag">Inventory Mgmt</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi plain"><div class="kpi-label">Total Revenue</div><div class="kpi-value">$12,055</div><div class="kpi-sub">Jun&ndash;Sep 2025 / 211 transactions</div></div>
+    <div class="kpi accent"><div class="kpi-label">Net Profit</div><div class="kpi-value red">$2,911</div><div class="kpi-sub">on $9,144 cost of goods</div></div>
+    <div class="kpi plain"><div class="kpi-label">Avg Profit Margin</div><div class="kpi-value">22.5%</div><div class="kpi-sub">per-transaction mean</div></div>
+    <div class="kpi plain"><div class="kpi-label">Return on Investment</div><div class="kpi-value">31.8%</div><div class="kpi-sub">net profit / total cost</div></div>
+    <div class="kpi plain"><div class="kpi-label">Profitable Transactions</div><div class="kpi-value">189 / 211</div><div class="kpi-sub"><span class="loss">22</span> sold below cost</div></div>
+  </div>
+
+  <div class="grid2 chart-row">
+    <div class="card chart-card">
+      <div class="section-title">Monthly P&amp;L &mdash; Revenue, Cost, Profit</div>
+      <canvas id="c_pl"></canvas>
+    </div>
+    <div class="card chart-card">
+      <div class="section-title">Cumulative Profit Growth</div>
+      <canvas id="c_cum"></canvas>
+    </div>
+  </div>
+
+  <div class="grid3">
+    <div class="card" style="border-left:2px solid var(--red)">
+      <div class="insight-num" style="color:var(--red)">$936</div>
+      <div class="insight-label">Best Month &#8212; July 2025</div>
+      <div class="insight-body">Black Bolt and White Flare ETBs released July 18. Bought at launch and sold at peak demand within days, driving the strongest month of the period.</div>
+    </div>
+    <div class="card" style="border-left:2px solid rgba(240,238,233,0.2)">
+      <div class="insight-num">42%</div>
+      <div class="insight-label">ETB Profit Share</div>
+      <div class="insight-body">ETBs generated $1,237 profit from just 61 sales (29% of volume). Highest profit-per-unit of any category at an average sell price of $88.</div>
+    </div>
+    <div class="card" style="border-left:2px solid var(--red)">
+      <div class="insight-num" style="color:var(--red)">27.5%</div>
+      <div class="insight-label">Facebook Margin</div>
+      <div class="insight-body">Best margin of any platform at 27.5%, vs eBay at 22.0%. Cash pickups eliminate platform fees entirely, though volume is limited to local buyers.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 1: MONTHLY -->
+<div class="page" id="page1">
+  <div class="kpis">
+    <div class="kpi plain"><div class="kpi-label">Jun 2025</div><div class="kpi-value">$580</div><div class="kpi-sub">47 sales / 22.3% margin / <span class="loss">6 losses</span></div></div>
+    <div class="kpi accent"><div class="kpi-label">Jul 2025</div><div class="kpi-value red">$936</div><div class="kpi-sub">60 sales / 24.9% margin / 3 losses</div></div>
+    <div class="kpi plain"><div class="kpi-label">Aug 2025</div><div class="kpi-value">$629</div><div class="kpi-sub">49 sales / 19.7% margin / <span class="loss">7 losses</span></div></div>
+    <div class="kpi plain"><div class="kpi-label">Sep 2025</div><div class="kpi-value">$765</div><div class="kpi-sub">55 sales / 22.5% margin / <span class="loss">6 losses</span></div></div>
+  </div>
+  <div class="grid2 chart-row">
+    <div class="card chart-card">
+      <div class="section-title">Revenue and Profit by Month</div>
+      <canvas id="c_mrev"></canvas>
+    </div>
+    <div class="card chart-card">
+      <div class="section-title">Margin % by Month</div>
+      <canvas id="c_mmargin"></canvas>
+    </div>
+  </div>
+  <div class="card table-card">
+    <div class="section-title">Full Monthly Breakdown</div>
+    <table>
+      <thead>
+        <tr><th>Month</th><th>Sales</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th><th>Running Total</th><th>Losses</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Jun 2025</td><td>47</td><td>$2,451</td><td style="color:var(--muted)">$1,871</td><td>$580</td><td>22.3%</td><td style="color:var(--muted)">$580</td><td style="color:var(--red)">6</td></tr>
+        <tr><td style="color:var(--red)">Jul 2025</td><td>60</td><td>$3,671</td><td style="color:var(--muted)">$2,735</td><td style="color:var(--red)">$936</td><td>24.9%</td><td style="color:var(--muted)">$1,517</td><td>3</td></tr>
+        <tr><td>Aug 2025</td><td>49</td><td>$2,809</td><td style="color:var(--muted)">$2,180</td><td>$629</td><td>19.7%</td><td style="color:var(--muted)">$2,146</td><td style="color:var(--red)">7</td></tr>
+        <tr><td>Sep 2025</td><td>55</td><td>$3,123</td><td style="color:var(--muted)">$2,358</td><td>$765</td><td>22.5%</td><td style="color:var(--muted)">$2,911</td><td style="color:var(--red)">6</td></tr>
+        <tr class="total-row"><td>Total</td><td style="color:var(--white);font-weight:700">211</td><td style="color:var(--white);font-weight:700">$12,055</td><td style="color:var(--muted)">$9,144</td><td style="color:var(--red);font-weight:700">$2,911</td><td>22.5%</td><td style="color:var(--muted)">n/a</td><td style="color:var(--red)">22</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE 2: PRODUCTS -->
+<div class="page" id="page2">
+  <div class="kpis">
+    <div class="kpi accent"><div class="kpi-label">Elite Trainer Box</div><div class="kpi-value red">$1,237</div><div class="kpi-sub">61 sales / 21.5% margin / avg $88/unit</div></div>
+    <div class="kpi plain"><div class="kpi-label">Booster Bundle</div><div class="kpi-value">$873</div><div class="kpi-sub">96 sales / 20.9% margin / avg $41/unit</div></div>
+    <div class="kpi plain"><div class="kpi-label">Premium Collection</div><div class="kpi-value">$601</div><div class="kpi-sub">36 sales / 25.1% margin / avg $58/unit</div></div>
+    <div class="kpi plain"><div class="kpi-label">Tin</div><div class="kpi-value">$200</div><div class="kpi-sub">18 sales / 28.9% margin / avg $35/unit</div></div>
+  </div>
+  <div class="grid2 chart-row">
+    <div class="card chart-card">
+      <div class="section-title">Profit Share by Category</div>
+      <canvas id="c_catpie"></canvas>
+    </div>
+    <div class="card chart-card">
+      <div class="section-title">Margin % by Category</div>
+      <canvas id="c_catbar"></canvas>
+    </div>
+  </div>
+  <div class="card items-card">
+    <div class="section-title">Top 8 Items by Total Profit</div>
+    <div id="topItems"></div>
+  </div>
+</div>
+
+<!-- PAGE 3: PLATFORMS -->
+<div class="page" id="page3">
+  <div class="kpis">
+    <div class="kpi plain"><div class="kpi-label">eBay</div><div class="kpi-value">$1,539</div><div class="kpi-sub">111 sales / 22.0% margin / avg $59.65</div></div>
+    <div class="kpi accent"><div class="kpi-label">TCGPlayer</div><div class="kpi-value red">$929</div><div class="kpi-sub">71 sales / 21.3% margin / avg $55.01</div></div>
+    <div class="kpi plain"><div class="kpi-label">Facebook Marketplace</div><div class="kpi-value">$442</div><div class="kpi-sub">29 sales / 27.5% margin / avg $52.69</div></div>
+  </div>
+  <div class="grid2 chart-row">
+    <div class="card chart-card">
+      <div class="section-title">Revenue Share by Platform</div>
+      <canvas id="c_platpie"></canvas>
+    </div>
+    <div class="card chart-card">
+      <div class="section-title">Profit by Platform</div>
+      <canvas id="c_platbar"></canvas>
+    </div>
+  </div>
+  <div class="card notes-card">
+    <div class="section-title">Platform Strategy Notes</div>
+    <div class="plat-grid">
+      <div class="plat-card" style="border-top:2px solid rgba(240,238,233,0.15)">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;margin-bottom:8px">eBay</div>
+        <div class="plat-note"><strong>What sold:</strong> ETBs, booster bundles, tins and highest-value items.</div>
+        <div class="plat-note"><strong>Pricing:</strong> BIN just under market. Auctioned rare and new-release items.</div>
+        <div style="font-size:10px;color:var(--muted2);font-family:'DM Mono',monospace;margin-top:10px;letter-spacing:0.5px">53% OF SALES / $1,539 PROFIT</div>
+      </div>
+      <div class="plat-card" style="border-top:2px solid var(--red)">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--red);margin-bottom:8px">TCGPlayer</div>
+        <div class="plat-note"><strong>What sold:</strong> Booster bundles and ETBs listed at TCG Low to move fast.</div>
+        <div class="plat-note"><strong>Pricing:</strong> Matched TCG Low on NM copies to appear first in search.</div>
+        <div style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace;margin-top:10px;letter-spacing:0.5px">34% OF SALES / $929 PROFIT</div>
+      </div>
+      <div class="plat-card" style="border-top:2px solid rgba(240,238,233,0.15)">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;margin-bottom:8px">Facebook Marketplace</div>
+        <div class="plat-note"><strong>What sold:</strong> Sealed bundles and local cash pickups for heavy lots.</div>
+        <div class="plat-note"><strong>Pricing:</strong> Bundled items, cash only, local pickup to avoid fees.</div>
+        <div style="font-size:10px;color:var(--muted2);font-family:'DM Mono',monospace;margin-top:10px;letter-spacing:0.5px">14% OF SALES / $442 PROFIT / BEST MARGIN 27.5%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /shell -->
+
+<script>
+var RED    = '#E3350D';
+var WHITE  = '#F0EEE9';
+var DARK   = '#0E0E0E';
+var MUTED  = '#6B7280';
+var MUTED2 = '#9CA3AF';
+var GRID   = 'rgba(240,238,233,0.06)';
+var DPR    = window.devicePixelRatio || 1;
+
+// ── SCALE SHELL TO VIEWPORT ──────────────────────────────────────────────────
+var BASE_W = 1280;
+var BASE_H = 800;
+
+function scaleShell() {
+  var shell = document.getElementById('shell');
+  var sw = window.innerWidth;
+  var sh = window.innerHeight;
+  var scale = Math.min(sw / BASE_W, sh / BASE_H);
+  shell.style.width  = BASE_W + 'px';
+  shell.style.height = BASE_H + 'px';
+  shell.style.transform = 'scale(' + scale + ')';
+  shell.style.transformOrigin = 'top left';
+  // centre if viewport is wider/taller
+  shell.style.left = Math.max(0, (sw - BASE_W * scale) / 2) + 'px';
+  shell.style.top  = Math.max(0, (sh - BASE_H * scale) / 2) + 'px';
+}
+
+scaleShell();
+window.addEventListener('resize', function() { scaleShell(); renderAll(); });
+
+// ── CANVAS HELPERS ────────────────────────────────────────────────────────────
+function palf(i) { return i % 2 === 0 ? RED : WHITE; }
+
+// Always size canvas to explicit height or parent's available height
+function setup(id, fixedH) {
+  var el = document.getElementById(id);
+  if (!el) return null;
+  var parent = el.parentElement;
+  var w = Math.max(parent.clientWidth - 32, 100);
+  var h = fixedH || parseInt(el.getAttribute('height'), 10) || Math.max(parent.clientHeight - 38, 60);
+  if (h < 60) return null; // skip if parent not yet laid out
+  el.width  = Math.round(w * DPR);
+  el.height = Math.round(h * DPR);
+  el.style.width  = w + 'px';
+  el.style.height = h + 'px';
+  var ctx = el.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // reset any previous scale
+  ctx.clearRect(0, 0, el.width, el.height);
+  ctx.scale(DPR, DPR);
+  return { ctx: ctx, w: w, h: h };
+}
+
+function rrect(ctx, x, y, w, h, r) {
+  if (w <= 0 || h <= 0) return;
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function fmtD(v) {
+  if (v >= 1000) return '$' + (v / 1000).toFixed(1) + 'k';
+  return '$' + Math.round(v);
+}
+function fmtPct(v) { return v.toFixed(1) + '%'; }
+
+function drawYAxis(ctx, pad, cw, ch, minV, maxV, steps, fmt) {
+  var range = maxV - minV;
+  for (var i = 0; i <= steps; i++) {
+    var v = minV + range * i / steps;
+    var y = pad.t + ch - ch * i / steps;
+    ctx.strokeStyle = GRID; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cw, y); ctx.stroke();
+    ctx.fillStyle = MUTED; ctx.font = '9px DM Mono, monospace';
+    ctx.textAlign = 'right'; ctx.fillText(fmt(v), pad.l - 8, y + 3);
+  }
+}
+
+function drawGroupedBar(id, labels, datasets, maxV, fixedH) {
+  var s = setup(id, fixedH);
+  if (!s) return;
+  var ctx = s.ctx, w = s.w, h = s.h;
+  var pad = { l: 48, r: 12, t: 24, b: 22 };
+  var cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
+
+  drawYAxis(ctx, pad, cw, ch, 0, maxV, 5, fmtD);
+
+  var lx = pad.l;
+  for (var di = 0; di < datasets.length; di++) {
+    var col = datasets[di].color || palf(di);
+    ctx.fillStyle = col; ctx.fillRect(lx, 6, 7, 7);
+    ctx.fillStyle = MUTED2; ctx.font = '9px DM Sans, sans-serif';
+    ctx.textAlign = 'left'; ctx.fillText(datasets[di].label, lx + 10, 13);
+    lx += ctx.measureText(datasets[di].label).width + 20;
+  }
+
+  var nG = labels.length, nB = datasets.length;
+  var groupW = cw / nG;
+  var barW = Math.min(groupW * 0.72 / nB, 28);
+
+  for (var di = 0; di < datasets.length; di++) {
+    var col = datasets[di].color || palf(di);
+    for (var gi = 0; gi < nG; gi++) {
+      var val = datasets[di].data[gi];
+      var barH = ch * (val / maxV);
+      var x = pad.l + gi * groupW + (groupW - nB * barW) / 2 + di * barW;
+      var y = pad.t + ch - barH;
+      rrect(ctx, x, y, barW - 2, barH, 3);
+      ctx.fillStyle = col; ctx.fill();
+    }
+  }
+
+  ctx.fillStyle = MUTED; ctx.font = '9px DM Sans, sans-serif'; ctx.textAlign = 'center';
+  for (var gi = 0; gi < nG; gi++) {
+    ctx.fillText(labels[gi], pad.l + gi * groupW + groupW / 2, h - 4);
+  }
+}
+
+function drawLine(id, labels, data, color, minV, maxV, fmt, fixedH) {
+  var s = setup(id, fixedH);
+  if (!s) return;
+  var ctx = s.ctx, w = s.w, h = s.h;
+  var pad = { l: 48, r: 12, t: 12, b: 22 };
+  var cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
+  var n = labels.length;
+  if (!fmt) fmt = fmtD;
+
+  drawYAxis(ctx, pad, cw, ch, minV, maxV, 5, fmt);
+
+  var range = maxV - minV;
+  var pts = [];
+  for (var i = 0; i < n; i++) {
+    pts.push({
+      x: pad.l + i * (cw / (n - 1)),
+      y: pad.t + ch - ch * ((data[i] - minV) / range)
+    });
+  }
+
+  var grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
+  grad.addColorStop(0, color + '30'); grad.addColorStop(1, color + '03');
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pad.t + ch);
+  for (var i = 0; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.lineTo(pts[n - 1].x, pad.t + ch);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+
+  for (var i = 0; i < pts.length; i++) {
+    ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = DARK; ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  ctx.fillStyle = MUTED; ctx.font = '9px DM Sans, sans-serif'; ctx.textAlign = 'center';
+  for (var i = 0; i < n; i++) {
+    ctx.fillText(labels[i], pad.l + i * (cw / (n - 1)), h - 4);
+  }
+}
+
+function drawDonut(id, labels, values, colors, centerText, fixedH) {
+  var s = setup(id, fixedH);
+  if (!s) return;
+  var ctx = s.ctx, w = s.w, h = s.h;
+  var total = 0;
+  for (var i = 0; i < values.length; i++) total += values[i];
+
+  var r = Math.min(w * 0.28, h * 0.38, 76);
+  var cx = r + 20, cy = h / 2, ri = r * 0.58;
+  var angle = -Math.PI / 2;
+
+  for (var i = 0; i < values.length; i++) {
+    var slice = 2 * Math.PI * values[i] / total;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, angle, angle + slice); ctx.closePath();
+    ctx.fillStyle = colors[i]; ctx.fill();
+    ctx.strokeStyle = DARK; ctx.lineWidth = 2; ctx.stroke();
+    angle += slice;
+  }
+
+  ctx.beginPath(); ctx.arc(cx, cy, ri, 0, Math.PI * 2);
+  ctx.fillStyle = DARK; ctx.fill();
+
+  ctx.textAlign = 'center'; ctx.fillStyle = WHITE;
+  ctx.font = 'bold 12px DM Sans, sans-serif'; ctx.fillText(centerText || '', cx, cy + 4);
+  ctx.font = '9px DM Mono, monospace'; ctx.fillStyle = MUTED; ctx.fillText('TOTAL', cx, cy + 16);
+
+  var legX = cx + r + 18;
+  var rowH = Math.min(36, (h - 12) / labels.length);
+  var legY0 = (h - rowH * labels.length) / 2;
+
+  for (var i = 0; i < labels.length; i++) {
+    var ly = legY0 + i * rowH;
+    ctx.fillStyle = colors[i]; ctx.fillRect(legX, ly + 6, 7, 7);
+    ctx.textAlign = 'left'; ctx.font = '10px DM Sans, sans-serif';
+    ctx.fillStyle = WHITE; ctx.fillText(labels[i], legX + 12, ly + 13);
+    ctx.font = '9px DM Mono, monospace'; ctx.fillStyle = MUTED2;
+    var pct = (values[i] / total * 100).toFixed(0) + '%';
+    ctx.fillText('$' + Math.round(values[i]).toLocaleString() + '  ' + pct, legX + 12, ly + 25);
+  }
+}
+
+function drawHBar(id, labels, values, colors, maxV, fixedH) {
+  var s = setup(id, fixedH);
+  if (!s) return;
+  var ctx = s.ctx, w = s.w, h = s.h;
+  var pad = { l: 140, r: 64, t: 10, b: 10 };
+  var cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
+  var barH = Math.min(ch / labels.length * 0.48, 24);
+  var gap = (ch - barH * labels.length) / (labels.length + 1);
+
+  for (var i = 1; i <= 4; i++) {
+    var x = pad.l + cw * i / 4;
+    ctx.strokeStyle = GRID; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ch); ctx.stroke();
+  }
+
+  for (var i = 0; i < labels.length; i++) {
+    var y = pad.t + gap * (i + 1) + barH * i;
+    var bw = cw * (values[i] / maxV);
+    var col = colors[i] || palf(i);
+    rrect(ctx, pad.l, y + 2, bw, barH - 4, 3);
+    ctx.fillStyle = col; ctx.fill();
+    ctx.fillStyle = MUTED2; ctx.font = '10px DM Sans, sans-serif';
+    ctx.textAlign = 'right'; ctx.fillText(labels[i], pad.l - 8, y + barH / 2 + 4);
+    ctx.fillStyle = col; ctx.font = '500 10px DM Mono, monospace';
+    ctx.textAlign = 'left'; ctx.fillText(values[i].toFixed(1) + '%', pad.l + bw + 8, y + barH / 2 + 4);
+  }
+}
+
+function drawSimpleBar(id, labels, values, colors, maxV, fixedH) {
+  var s = setup(id, fixedH);
+  if (!s) return;
+  var ctx = s.ctx, w = s.w, h = s.h;
+  var pad = { l: 48, r: 12, t: 20, b: 22 };
+  var cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
+
+  drawYAxis(ctx, pad, cw, ch, 0, maxV, 5, fmtD);
+
+  var barW = Math.min(cw / labels.length * 0.5, 52);
+  var groupW = cw / labels.length;
+
+  for (var i = 0; i < values.length; i++) {
+    var bh = ch * (values[i] / maxV);
+    var x = pad.l + i * groupW + (groupW - barW) / 2;
+    var y = pad.t + ch - bh;
+    var col = colors[i] || palf(i);
+    rrect(ctx, x, y, barW, bh, 4);
+    ctx.fillStyle = col; ctx.fill();
+    ctx.fillStyle = col; ctx.font = 'bold 9px DM Mono, monospace';
+    ctx.textAlign = 'center'; ctx.fillText(fmtD(values[i]), x + barW / 2, y - 5);
+  }
+
+  ctx.fillStyle = MUTED; ctx.font = '9px DM Sans, sans-serif'; ctx.textAlign = 'center';
+  for (var i = 0; i < labels.length; i++) {
+    ctx.fillText(labels[i], pad.l + i * groupW + groupW / 2, h - 4);
+  }
+}
+
+function buildTopItems() {
+  var items = [
+    { name: 'Prismatic Evo. Special Collection', profit: 392.11 },
+    { name: 'Black Bolt ETB',                    profit: 355.14 },
+    { name: 'Destined Rivals ETB',               profit: 280.40 },
+    { name: 'Prismatic Evo. Booster Bundle',      profit: 222.00 },
+    { name: 'Stellar Crown ETB',                 profit: 220.17 },
+    { name: 'Blooming Waters Collection',        profit: 208.72 },
+    { name: 'White Flare ETB',                   profit: 206.87 },
+    { name: 'Crown Zenith Tin',                  profit: 200.24 }
+  ];
+  var container = document.getElementById('topItems');
+  if (!container) return;
+  container.innerHTML = '';
+  var maxP = items[0].profit;
+  for (var i = 0; i < items.length; i++) {
+    var col = (i % 2 === 0) ? RED : WHITE;
+    var txtCol = (col === WHITE) ? '#111' : '#fff';
+    var pct = Math.round(items[i].profit / maxP * 100);
+
+    var div = document.createElement('div'); div.className = 'bar-item';
+    var rank = document.createElement('div'); rank.className = 'bar-rank';
+    rank.style.cssText = 'background:' + col + ';color:' + txtCol;
+    rank.textContent = String(i + 1);
+    var lbl = document.createElement('div'); lbl.className = 'bar-label';
+    lbl.textContent = items[i].name;
+    var track = document.createElement('div'); track.className = 'bar-track';
+    var fill = document.createElement('div'); fill.className = 'bar-fill';
+    fill.style.cssText = 'width:' + pct + '%;background:' + col;
+    track.appendChild(fill);
+    var val = document.createElement('div'); val.className = 'bar-value';
+    val.style.color = col; val.textContent = '$' + Math.round(items[i].profit);
+    div.appendChild(rank); div.appendChild(lbl); div.appendChild(track); div.appendChild(val);
+    container.appendChild(div);
+  }
+}
+
+var currentPage = 0;
+
+function renderPage(n) {
+  if (n === 0) {
+    drawGroupedBar('c_pl',
+      ['Jun', 'Jul', 'Aug', 'Sep'],
+      [
+        { label: 'Revenue', data: [2451, 3671, 2809, 3123], color: WHITE },
+        { label: 'Cost',    data: [1871, 2735, 2180, 2358], color: 'rgba(240,238,233,0.25)' },
+        { label: 'Profit',  data: [580,  936,  629,  765],  color: RED }
+      ], 4000, 200);
+    drawLine('c_cum', ['Jun','Jul','Aug','Sep'], [580,1517,2146,2911], RED, 0, 3500, fmtD, 200);
+  }
+  if (n === 1) {
+    drawGroupedBar('c_mrev',
+      ['Jun', 'Jul', 'Aug', 'Sep'],
+      [
+        { label: 'Revenue', data: [2451, 3671, 2809, 3123], color: WHITE },
+        { label: 'Profit',  data: [580,  936,  629,  765],  color: RED }
+      ], 4000, 178);
+    drawLine('c_mmargin', ['Jun','Jul','Aug','Sep'], [22.29,24.92,19.72,22.49], RED, 15, 30, fmtPct, 178);
+  }
+  if (n === 2) {
+    drawDonut('c_catpie',
+      ['ETB','Booster Bundle','Prem. Collection','Tin'],
+      [1237.29, 872.53, 600.83, 200.24],
+      [RED, WHITE, RED, WHITE], '$2,911', 178);
+    drawHBar('c_catbar',
+      ['Tin','Prem. Collection','ETB','Booster Bundle'],
+      [28.90, 25.11, 21.51, 20.94],
+      [WHITE, RED, WHITE, RED], 35, 178);
+    buildTopItems();
+  }
+  if (n === 3) {
+    drawDonut('c_platpie',
+      ['eBay','TCGPlayer','Facebook'],
+      [6621.62, 3905.46, 1527.99],
+      [WHITE, RED, WHITE], '$12,055', 178);
+    drawSimpleBar('c_platbar',
+      ['eBay','TCGPlayer','Facebook'],
+      [1539.20, 929.44, 442.25],
+      [WHITE, RED, WHITE], 1800, 178);
+  }
+}
+
+function showPage(n) {
+  currentPage = n;
+  var pages = document.querySelectorAll('.page');
+  var tabs  = document.querySelectorAll('.tab');
+  for (var i = 0; i < pages.length; i++) {
+    pages[i].classList.toggle('active', i === n);
+    tabs[i].classList.toggle('active', i === n);
+  }
+  setTimeout(function() { renderPage(n); }, 20);
+}
+
+window.addEventListener('load', function() {
+  scaleShell();
+  setTimeout(function() { renderPage(0); }, 80);
+});
+window.addEventListener('resize', function() {
+  scaleShell();
+  setTimeout(function() { renderPage(currentPage); }, 20);
+});
+</script>
+</body>
+</html>
